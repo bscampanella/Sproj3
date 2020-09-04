@@ -142,7 +142,44 @@ class CaptioningRNN(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        #1
+        h0 = np.dot(features, W_proj) + b_proj
+
+        #2
+        embeddedCaptionsIn, embedCacheIn  = word_embedding_forward(captions_in, W_embed)
+        #embeddedCaptionsOut, embedCacheOut = word_embedding_forward(captions_out, W_embed)
+
+        #3
+        if(self.cell_type == "rnn"):
+          hArr, RnnForwardCache = rnn_forward(embeddedCaptionsIn, h0, Wx, Wh, b)
+
+
+        else: #ltsm
+          pass
+
+        #4
+        wordScores, temporalAffineCache = temporal_affine_forward(hArr, W_vocab, b_vocab)
+
+        #5
+        loss, dx = temporal_softmax_loss(wordScores, captions_out, mask)
+
+        #compute the gradients
+        dHArr, dW_vocab, db_vocab = temporal_affine_backward(dx, temporalAffineCache)
+        dOutEmbed, dH0, dWx, dWh, db = rnn_backward(dHArr, RnnForwardCache)
+        dWEmbed = word_embedding_backward(dOutEmbed, embedCacheIn)
+        dW_proj = np.dot(dH0.T, features).T
+        db_proj = np.sum(dH0, axis = 0)
+        #dFeatures = np.dot(dH0, W_proj)
+        
+        grads['W_embed'] = dWEmbed
+        grads['W_proj'] = dW_proj
+        grads['b_proj'] = db_proj
+        grads['Wx'] = dWx
+        grads['Wh'] = dWh
+        grads['b'] = db
+        grads['W_vocab'] = dW_vocab
+        grads['b_vocab'] = db_vocab
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -211,7 +248,25 @@ class CaptioningRNN(object):
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        h0 = np.dot(features, W_proj) + b_proj
+
+        startData = np.ones((N, W_embed.shape[1])) * W_embed[self._start]
+        nextH, cache = rnn_step_forward(startData, h0, Wx, Wh, b)
+
+        wordGuessesAll = np.dot(nextH, W_vocab) + b_vocab
+        #wordGuessesMax = np.where(wordGuessesAll == np.amax(a=wordGuessesAll, axis=1, keepdims=True))
+        wordGuessesMax = np.argmax(wordGuessesAll, 1)
+
+        #print(startData)
+        print(wordGuessesMax.shape)
+        captions[:,0] = wordGuessesMax
+        for i in range(1,max_length):
+          embededWords = W_embed[wordGuessesMax.flatten(),:]
+          nextH, cache = rnn_step_forward(embededWords, nextH, Wx, Wh, b)
+          wordGuessesAll = np.dot(nextH, W_vocab) + b_vocab
+          #wordGuessesMax = np.where(wordGuessesAll == np.amax(a=wordGuessesAll, axis=1, keepdims=True))
+          wordGuessesMax = np.argmax(wordGuessesAll, 1)
+          captions[:,i] = wordGuessesMax
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

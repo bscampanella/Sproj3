@@ -203,7 +203,8 @@ def word_embedding_forward(x, W):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    out = W[x,:]
+    cache = x, W
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -236,7 +237,16 @@ def word_embedding_backward(dout, cache):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, W = cache
+    dW = np.zeros_like(W)
+    
+    #N,T,D = dout.shape
+    #for n in range(N):
+    #    for t in range(T):
+    #        np.add.at(dW, x[n,t], dout[n,t])
+
+    np.add.at(dW, x, dout)
+
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -287,8 +297,30 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     # You may want to use the numerically stable sigmoid implementation above.  #
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    sizeH = int(b.shape[0] / 4)
 
-    pass
+    #1 calculate the large matrix
+    LargeMat = np.dot(x, Wx) + np.dot(prev_h, Wh) + b
+
+    #2 chop up the large matrix?
+    ListAiAfAoAg = np.split(LargeMat, [sizeH, 2*sizeH, 3*sizeH], 1)
+
+    #3 apply nonlinearities
+    #dim (n x h)
+    Ai_nl = sigmoid(ListAiAfAoAg[0])
+    Af_nl = sigmoid(ListAiAfAoAg[1])
+    Ao_nl = sigmoid(ListAiAfAoAg[2])
+    Ag_nl = np.tanh(ListAiAfAoAg[3])
+
+    #4 run formulas and get updated h and c
+    #next_c = np.multiply(Af_nl, prev_c) + np.multiply(Ai_nl, Ag_nl)
+    CprevXForget = np.multiply(Af_nl, prev_c)
+    IncludeXG = np.multiply(Ai_nl, Ag_nl)
+    next_c = CprevXForget + IncludeXG
+
+    next_h = np.multiply(Ao_nl,  np.tanh(next_c))
+    
+    cache = [ListAiAfAoAg, Ai_nl, Af_nl, Ao_nl, Ag_nl, next_c, CprevXForget, IncludeXG, prev_c, prev_h]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -323,9 +355,27 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     # the output value from the nonlinearity.                                   #
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    ListAiAfAoAg, Ai_nl, Af_nl, Ao_nl, Ag_nl, next_c, CprevXForget, IncludeXG, prev_c, prev_h = cache
+    
 
-    pass
+    #gradCnextAfterTan = Ao_nl * dnext_h 
+    #gradCnextBeforeTan = (1 - next_c * next_c) * gradCnextAfterTan
+    #gradCnextBeforeAddition = gradCnextBeforeTan + dnext_c
+    #dprev_c = Af_nl * gradCnextBeforeAddition
 
+    dnexthTan = (1 - np.tanh(next_c)**2)
+    dprev_c = Af_nl * ( Ao_nl * dnext_h * dnexthTan + dnext_c )
+
+    dAo = Ao_nl * (1 - Ao_nl)
+
+    #     Ag tan deriv       Ai*Ag derv    upstream gradient from C and H
+    dAg = (1 - Ag_nl**2) * (Ai_nl * ( Ao_nl * dnext_h * dnexthTan + dnext_c ))
+
+    #       Ai sigmoid deriv        Ai*Ag derv  upstream gradient from C and H
+    dAi =  (Ai_nl * (1 - Ai_nl)) * (Ag_nl * ( Ao_nl * dnext_h * dnexthTan + dnext_c ))
+
+    #
+    dAf = (Af_nl * (1 - Af_nl)) * (prev_h * ( Ao_nl * dnext_h * dnexthTan + dnext_c ))
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
